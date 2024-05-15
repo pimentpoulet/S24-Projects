@@ -43,6 +43,6 @@ for w in ['clement']:
         print(f"{ch1}{ch2}: {prob:.4f} {logprob:.4f}")
 
 print(f"{log_likelihood=}")
-nll = -log_likelihood
+nll = -log_likelihood          # negative log-likelihood
 print(f"{nll=}")
 print(f"{nll/n=}")
