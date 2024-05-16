@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import torch.nn.functional as F
 
 
-input_file_path = os.path.join(os.path.dirname(__file__), 'names.txt')
+input_file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'names.txt')
 words = open(input_file_path, 'r').read().splitlines()
 
 # lookup tables for s --> i || i --> s
