@@ -8,7 +8,7 @@ import torch.nn.functional as F
 import random
 
 from functions import *
-
+from datasets import *
 
 input_file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'names.txt')
 words = open(input_file_path, 'r').read().splitlines()
