@@ -1,10 +1,9 @@
-import torch as t
 import torch.nn as nn
 
 from torch.nn import functional
 
 from get_data import *
-from functions import *
+from Functions.functions import *
 
 
 # encode the entire text dataset and store it in a torch.Tensor
@@ -43,6 +42,22 @@ class BigramLanguageModel(nn.Module):
         loss = functional.cross_entropy(logits, targets)
 
         return logits, loss
+
+    def generate(self, idx, max_new_token):
+        # idx is (B,T) array of indices in the current context
+        for _ in range(max_new_token):
+            # get the predictions
+            logits, loss = self(idx)
+            # focus only on the last time step
+            logits = logits[:,-1,:]    # becomes (B,C)
+            # apply softmax to get probabilities
+            probs = F.softmax(logits, dim=1)    # (B,C)
+            # sample from the distribution
+            idx_next = t.multinomial(probs, num_samples=1)    # (B,1)
+            # append sampled index to the running sequence
+            idx = t.cat((idx, idx_next), dim=1)    # (B,T+1)
+
+        return idx
 
 
 m = BigramLanguageModel(vocab_size)

@@ -2,6 +2,7 @@ import torch as t
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
 import random
+import matplotlib.gridspec as gridspec
 
 from functions import *
 from datasets import *
@@ -21,7 +22,7 @@ vocab_size = len(itos)
 # build the dataset
 block_size = 3
 
-random.seed(1789)
+# random.seed(2147483647)
 random.shuffle(words)
 
 n1 = int(0.8*len(words))
@@ -35,21 +36,24 @@ Xte,  Yte  = build_dataset(words[n2:], stoi=stoi, itos=itos, block_size=block_si
 n_emb = 10        # dimensionality of the character embedding vectors
 n_hidden = 200    # number of neurons in the hidden layer of the MLP
 
-g  = t.Generator().manual_seed(1789)
+g  = t.Generator()    # .manual_seed(2147483647)
 C  = t.randn((vocab_size, n_emb),            generator=g)
-w1 = t.randn((n_emb * block_size, n_hidden), generator=g)
-b1 = t.randn(n_hidden,                       generator=g)
-w2 = t.randn((n_hidden, vocab_size),         generator=g)
-b2 = t.randn(vocab_size,                     generator=g)
+w1 = t.randn((n_emb * block_size, n_hidden), generator=g) * (5/3)/((n_emb * block_size)**0.5)
+b1 = t.randn(n_hidden,                       generator=g) * 0.01
+w2 = t.randn((n_hidden, vocab_size),         generator=g) * 0.01
+b2 = t.randn(vocab_size,                     generator=g) * 0
 
-parameters = [C, w1, b1, w2, b2]
+bngain = t.ones((1, n_hidden))
+bnbias = t.zeros((1, n_hidden))
+
+parameters = [C, w1, b1, w2, b2, bngain, bnbias]
 print(f"number of parameters in total: {sum(p.nelement() for p in parameters)}")
 
 for p in parameters:
     p.requires_grad = True
 
 # optimization
-max_steps = 10000
+max_steps = 20000
 batch_size = 32
 lossi = []
 for i in range(max_steps):
@@ -62,8 +66,11 @@ for i in range(max_steps):
     emb = C[Xb]                            # embed the characters into vectors
     embcat = emb.view(emb.shape[0], -1)    # concatenate the vectors
     hpreact = embcat @ w1 + b1             # hidden layer pre-activation
+
+    hpreact = bngain * (hpreact - hpreact.mean(0, keepdim=True) / hpreact.std(0, keepdim=True)) + bnbias
+
     h = t.tanh(hpreact)                    # hidden layer
-    logits = h @ w2 + b2                  # output layer
+    logits = h @ w2 + b2                   # output layer
     loss = F.cross_entropy(logits, Yb)     # loss function
 
     # backward pass
@@ -72,61 +79,82 @@ for i in range(max_steps):
     loss.backward()
 
     # update
-    lr = 0.1 if i < 5000 else 0.01    # step learning rate decay
+    lr = 0.1 if i < 10000 else 0.01    # step learning rate decay
     for p in parameters:
         p.data += -lr * p.grad
 
     # track stats
-    if i % 500 == 0:
+    if i % 2000 == 0:
         print(f"{i:7d}/{max_steps:7d}: {loss.item():.4f}")
     lossi.append(loss.log10().item())
 
-plt.plot(lossi)
-# plt.show()
+    if i == 0:
+        # plot first iteration data
+        fig = plt.figure(figsize=(15,8))
+
+        # create a gridspec
+        gs = gridspec.GridSpec(3, 2, height_ratios=[1, 1, 1])
+
+        # initial neurons' tanh activation
+        ax1 = plt.subplot(gs[0, :])
+        ax1.imshow(h.abs() > 0.99, cmap="gray", interpolation="nearest")
+        ax1.set_title("initial neurons' tanh activation")
+
+        # tanh layer's inputs
+        ax2 = plt.subplot(gs[1, 0])
+        ax2.hist(hpreact.view(-1).tolist(), 50)
+        ax2.set_title("tanh layer's inputs")
+
+        # tanh layer's activation
+        ax3 = plt.subplot(gs[1, 1])
+        ax3.hist(h.view(-1).tolist(), 50)
+        ax3.set_title("tanh layer's activation")
+
+ax4 = plt.subplot(gs[2, :])
+ax4.plot(lossi)
+ax4.set_title("loss.log10() evolution")
+
+# tight layout
+plt.tight_layout()
 
 split_loss("train",
            Xtr=Xtr, Ytr=Ytr,
            Xdev=Xdev, Ydev=Ydev,
            Xte=Xte, Yte=Yte,
            C=C,
-           w1=w1, b1=b1, w2=w2, b2=b2)
+           w1=w1, b1=b1, w2=w2, b2=b2,
+           bngain=bngain, bnbias=bnbias)
 split_loss("val",
            Xtr=Xtr, Ytr=Ytr,
            Xdev=Xdev, Ydev=Ydev,
            Xte=Xte, Yte=Yte,
            C=C,
-           w1=w1, b1=b1, w2=w2, b2=b2)
+           w1=w1, b1=b1, w2=w2, b2=b2,
+           bngain=bngain, bnbias=bnbias)
 
+# sample from the model
+for _ in range(20):
+    out = []
+    context = [0] * block_size
+    while True:
 
+        # forward pass the neural net
+        emb = C[t.tensor([context])]    # (1, block_size, n_embd)
+        h = t.tanh(emb.view(1, -1) @ w1 + b1)
+        logits = h @ w2 + b2
+        probs = t.softmax(logits, dim=1)
 
+        # sample from the distribution
+        ix = t.multinomial(probs, num_samples=1, generator=g).item()
 
+        # shift the context window and track the samples
+        context = context[1:] + [ix]
+        out.append(ix)
 
+        # if we sample the special "." token, break
+        if ix == 0:
+            break
 
+    # print(''.join(itos[i] for i in out))
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+plt.show()
