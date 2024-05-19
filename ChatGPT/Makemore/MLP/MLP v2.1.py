@@ -48,7 +48,7 @@ bnbias = t.zeros((1, n_hidden))
 bnmean_running = t.zeros((1, n_hidden))
 bnstd_running = t.ones((1, n_hidden))
 
-parameters = [C, w1, b1, w2, b2, bngain, bnbias]
+parameters = [C, w1, w2, b2, bngain, bnbias]
 print(f"number of parameters in total: {sum(p.nelement() for p in parameters)}")
 
 for p in parameters:
@@ -67,7 +67,7 @@ for i in range(max_steps):
     # forward pass
     emb = C[Xb]                            # embed the characters into vectors
     embcat = emb.view(emb.shape[0], -1)    # concatenate the vectors
-    hpreact = embcat @ w1 + b1             # hidden layer pre-activation
+    hpreact = embcat @ w1  # + b1          # hidden layer pre-activation
 
     bnmeani = hpreact.mean(0, keepdim=True)
     bnstdi = hpreact.std(0, keepdim=True)
@@ -78,6 +78,8 @@ for i in range(max_steps):
     with t.no_grad():
         bnmean_running = 0.999 * bnmean_running + 0.001 * bnmeani
         bnstd_running = 0.999 * bnstd_running + 0.001 * bnstdi
+
+
 
     h = t.tanh(hpreact)                    # hidden layer
     logits = h @ w2 + b2                   # output layer
