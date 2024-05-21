@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 import random
 import matplotlib.gridspec as gridspec
 
+from matplotlib.font_manager import FontProperties
+
 from functions import *
 from datasets import *
 
@@ -139,6 +141,7 @@ for p in parameters:
 max_steps = 200000
 batch_size = 32
 lossi = []
+ud = []
 
 for i in range(max_steps):
 
@@ -167,13 +170,28 @@ for i in range(max_steps):
 
     # track stats
     if i % max_steps/10 == 0:
-        print(f"{i:7d}/{max_steps:7d}: {loss.item():.4f}")
+        print(f"{i:7d}/{max_steps:7d}: {loss.item():.4f}\n")
     lossi.append(loss.log10().item())
 
-    break
+    with t.no_grad():
+        ud.append([(lr * p.grad.std() / p.data.std()).log10().item() for p in parameters])
+
+    if i == 1000:
+        break
+
+# set fonts
+plt.rcParams.update({
+    'font.size': 8,            # Set the font size
+    'axes.titlesize': 8,       # Set the font size for axes titles
+    'axes.labelsize': 8,       # Set the font size for x and y labels
+    'xtick.labelsize': 8,      # Set the font size for x tick labels
+    'ytick.labelsize': 8,      # Set the font size for y tick labels
+    'legend.fontsize': 8,      # Set the font size for legend
+})
 
 # visualize stats
-plt.figure(figsize=(19, 4))
+plt.subplot(4, 1, 1)
+
 legends = []
 for i, layer in enumerate(layers[:-1]):    # excludes the output layer
     if isinstance(layer, Tanh):
@@ -183,6 +201,51 @@ for i, layer in enumerate(layers[:-1]):    # excludes the output layer
         plt.plot(hx[:-1].detach(), hy.detach())
         legends.append(f"layer {i} ({layer.__class__.__name__})")
 
-plt.legend(legends)
-plt.title("Activation distribution")
+plt.legend(legends)  # , prop=font_properties)
+plt.title("Activation distribution")  # , fontsize=title_font)
+
+plt.subplot(4, 1, 2)
+legends = []
+for i, layer in enumerate(layers[:-1]):    # excludes the output layer
+    if i == 0:
+        print()
+    if isinstance(layer, Tanh):
+        tt = layer.out.grad
+        print(f"layer %d (%{len(layer.__class__.__name__)}s): mean %+f, std %e" % (i, layer.__class__.__name__, tt.mean(), tt.std()))
+        hy, hx = t.histogram(tt, density=True)
+        plt.plot(hx[:-1].detach(), hy.detach())
+        legends.append(f"layer {i} ({layer.__class__.__name__})")
+
+plt.legend(legends)  # , prop=font_properties)
+plt.title("Gradient distribution")  # , fontsize=title_font)
+
+plt.subplot(4, 1, 3)
+legends = []
+for i, p in enumerate(parameters):
+    if i == 0:
+        print()
+    tt = p.grad
+    if p.ndim == 2:
+        print(f"weight %10s | mean %+f | std %e | grad:data ratio %e" % (tuple(p.shape), tt.mean(), tt.std(), tt.std() / p.std()))
+        hy, hx = t.histogram(tt, density=True)
+        plt.plot(hx[:-1].detach(), hy.detach())
+        legends.append(f"{i} {tuple(p.shape)}")
+
+plt.legend(legends)  # , prop=font_properties)
+plt.title("Weights gradient distribution")  # , fontsize=title_font)
+
+plt.subplot(4, 1, 4)
+legends = []
+for i, p in enumerate(parameters):
+    if p.ndim == 2:
+        plt.plot([ud[j][i] for j in range(len(ud))])
+        legends.append("param %d" % i)
+
+plt.plot([0, len(ud)], [-3, 3], "k")
+plt.legend(legends)  # , prop=font_properties)
+plt.title("Update to data ratio")  # , fontsize=title_font)
+
+# adjust figure layout
+plt.get_current_fig_manager().window.showMaximized()
+
 plt.show()
