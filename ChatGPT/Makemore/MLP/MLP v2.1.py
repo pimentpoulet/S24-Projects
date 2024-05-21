@@ -79,8 +79,6 @@ for i in range(max_steps):
         bnmean_running = 0.999 * bnmean_running + 0.001 * bnmeani
         bnstd_running = 0.999 * bnstd_running + 0.001 * bnstdi
 
-
-
     h = t.tanh(hpreact)                    # hidden layer
     logits = h @ w2 + b2                   # output layer
     loss = F.cross_entropy(logits, Yb)     # loss function
@@ -167,6 +165,7 @@ for _ in range(20):
 
         # if we sample the special "." token, break
         if ix == 0:
+            print(probs.shape)
             break
 
     # print(''.join(itos[i] for i in out))

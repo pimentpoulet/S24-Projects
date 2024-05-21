@@ -48,7 +48,12 @@ class BatchNorm1d:
 
         self.eps = eps
         self.momentum = momentum
-        self.training = True
+        self.training = False
+
+        # self.training needs to be True when training and False when sampling from the model
+        # ideally, this code would be in a jupyter notebook to be able to run the class defs
+        # on their own and change the mode before and after running the training cell
+        # I don't know how to do it in a classic PyCharm file
 
         # parameters (trained with backprop)
         self.gamma = t.ones(dim)
@@ -113,17 +118,17 @@ g = t.Generator().manual_seed(1789)
 C = t.randn((vocab_size, n_embd))
 
 layers = [
-    Linear(n_embd * block_size, n_hidden), Tanh(),
-    Linear(n_hidden,            n_hidden), Tanh(),
-    Linear(n_hidden,            n_hidden), Tanh(),
-    Linear(n_hidden,            n_hidden), Tanh(),
-    Linear(n_hidden,            n_hidden), Tanh(),
-    Linear(n_hidden,          vocab_size),
+    Linear(n_embd * block_size, n_hidden, bias=False), BatchNorm1d(n_hidden), Tanh(),
+    Linear(n_hidden,            n_hidden, bias=False), BatchNorm1d(n_hidden), Tanh(),
+    Linear(n_hidden,            n_hidden, bias=False), BatchNorm1d(n_hidden), Tanh(),
+    Linear(n_hidden,            n_hidden, bias=False), BatchNorm1d(n_hidden), Tanh(),
+    Linear(n_hidden,            n_hidden, bias=False), BatchNorm1d(n_hidden), Tanh(),
+    Linear(n_hidden,          vocab_size, bias=False), BatchNorm1d(vocab_size),
 ]
 
 with t.no_grad():
     # last layer : make less confident
-    layers[-1].weight *= 0.1
+    layers[-1].gamma *= 0.1
     # all other layers : apply gain
     for layer in layers[:-1]:
         if isinstance(layer, Linear):
@@ -138,7 +143,7 @@ for p in parameters:
     p.requires_grad = True
 
 # optimization
-max_steps = 200000
+max_steps = 100000
 batch_size = 32
 lossi = []
 ud = []
@@ -169,15 +174,13 @@ for i in range(max_steps):
         p.data += -lr * p.grad
 
     # track stats
-    if i % max_steps/10 == 0:
+    if i % 10000 == 0:
         print(f"{i:7d}/{max_steps:7d}: {loss.item():.4f}\n")
     lossi.append(loss.log10().item())
 
     with t.no_grad():
         ud.append([(lr * p.grad.std() / p.data.std()).log10().item() for p in parameters])
 
-    if i == 1000:
-        break
 
 # set fonts
 plt.rcParams.update({
@@ -186,7 +189,7 @@ plt.rcParams.update({
     'axes.labelsize': 8,       # Set the font size for x and y labels
     'xtick.labelsize': 8,      # Set the font size for x tick labels
     'ytick.labelsize': 8,      # Set the font size for y tick labels
-    'legend.fontsize': 8,      # Set the font size for legend
+    'legend.fontsize': 8,      # Set the foVVnt size for legend
 })
 
 # visualize stats
@@ -201,7 +204,7 @@ for i, layer in enumerate(layers[:-1]):    # excludes the output layer
         plt.plot(hx[:-1].detach(), hy.detach())
         legends.append(f"layer {i} ({layer.__class__.__name__})")
 
-plt.legend(legends)  # , prop=font_properties)
+plt.legend(legends)
 plt.title("Activation distribution")  # , fontsize=title_font)
 
 plt.subplot(4, 1, 2)
@@ -216,7 +219,7 @@ for i, layer in enumerate(layers[:-1]):    # excludes the output layer
         plt.plot(hx[:-1].detach(), hy.detach())
         legends.append(f"layer {i} ({layer.__class__.__name__})")
 
-plt.legend(legends)  # , prop=font_properties)
+plt.legend(legends)
 plt.title("Gradient distribution")  # , fontsize=title_font)
 
 plt.subplot(4, 1, 3)
@@ -231,7 +234,7 @@ for i, p in enumerate(parameters):
         plt.plot(hx[:-1].detach(), hy.detach())
         legends.append(f"{i} {tuple(p.shape)}")
 
-plt.legend(legends)  # , prop=font_properties)
+plt.legend(legends)
 plt.title("Weights gradient distribution")  # , fontsize=title_font)
 
 plt.subplot(4, 1, 4)
@@ -242,10 +245,36 @@ for i, p in enumerate(parameters):
         legends.append("param %d" % i)
 
 plt.plot([0, len(ud)], [-3, -3], "k")
-plt.legend(legends)  # , prop=font_properties)
+plt.legend(legends)
 plt.title("Update to data ratio")  # , fontsize=title_font)
 
 # adjust figure layout
 plt.get_current_fig_manager().window.showMaximized()
 
-plt.show()
+# sample from the model
+for _ in range(20):
+    out = []
+    context = [0] * block_size
+    while True:
+
+        # forward pass the neural net
+        emb = C[t.tensor([context])]    # (1, block_size, n_embd)
+        x = emb.view(1, -1)    # concatenate the vectors
+        for layer in layers:
+            x = layer(x)
+        probs = t.softmax(x, dim=1)
+
+        # sample from the distribution
+        ix = t.multinomial(probs, num_samples=1, generator=g).item()
+
+        # shift the context window and track the samples
+        context = context[1:] + [ix]
+        out.append(ix)
+
+        # if we sample the special "." token, break
+        if ix == 0:
+            break
+
+    print(''.join(itos[i] for i in out))
+
+# plt.show()
