@@ -184,7 +184,6 @@ split_loss("val",
            Xte=Xte, Yte=Yte,
            C=C, layers=layers)
 
-
 # sample from the model
 for _ in range(20):
     out = []
